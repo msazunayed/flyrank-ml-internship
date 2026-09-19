@@ -1,0 +1,17 @@
+{
+  "lane": "Refresh / Content Opportunity Scoring",
+  "model": "Logistic Regression",
+  "feature_window": "2026-03",
+  "outcome_window": "2026-04",
+  "validation": "client_group_holdout",
+  "baseline_precision_at_50": 0.48,
+  "model_precision_at_50": 0.66,
+  "relative_improvement_pct": 37.5,
+  "features": [
+    "impressions_31d",
+    "clicks_31d",
+    "ctr_31d",
+    "avg_position_31d",
+    "sessions_31d"
+  ]
+}
