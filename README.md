@@ -1,563 +1,169 @@
-# Which Pages Should a Reviewer Open First? Ranking Content by Predicted Impression Decline
+# Predicting Future Content Performance Decline for Search-Intelligence Review Prioritization
 
-## FlyRank Machine Learning Internship Capstone
+**FlyRank ML Internship Capstone** · Lane: Refresh / Content Opportunity Scoring
+**Author:** Shakil Ahmed Zunayed ([@MSAZunayed](https://msazunayed.github.io))
 
-**Lane:** Refresh / Content Opportunity Scoring
-**Author:** Shakil Ahmed Zunayed
+> A decision-support model that ranks web pages by their risk of losing search impressions next month, so a content/SEO reviewer knows which 50 pages to look at first.
 
----
-
-## Overview
-
-This project builds a machine-learning decision-support system that helps content and SEO teams decide which pages should be reviewed first when review capacity is limited.
-
-The system uses historical search and engagement signals to estimate the probability that a content page will experience future performance decline.
-
-The predicted probabilities are then used to create a ranked review queue for human decision-making.
-
-The system does **not** automatically edit, delete, merge, or refresh content.
+**Demo video (unlisted, ~5 min):** `https://youtu.be/wDECsVVbFCo`
+**Notebook:** [`work/notebooks/capstone.ipynb`](work/notebooks/capstone.ipynb)
 
 ---
 
-## Problem
+## What it does and for whom
 
-A content team may manage thousands of pages but only have enough time to manually review a small number of them.
+A content or SEO team cannot manually inspect every page. This project answers one question:
 
-The main research question is:
+> Can search and engagement signals measured *before* a decision point predict future content-performance decline, and produce a better review queue than a transparent hand-written rule?
 
-> Can observable search and engagement signals measured before a decision point help predict future content-performance decline and produce a more useful ranked review queue than a transparent hand-written rule?
+- **For:** content and SEO reviewers with limited time.
+- **Input:** one row per pseudonymized client-content page, built from March 2026 search and engagement data.
+- **Output:** a ranked review queue. Pages are ordered by predicted probability of decline, and each page gets a plain-language reason code.
+- **What it is not:** it does not rewrite, merge, prune, or delete content. It only ranks candidates for a human to review.
 
-The goal is therefore **prioritization**, not automatic content modification.
+## Key results
 
----
+| Method | Precision@50 | ROC-AUC | Avg. Precision |
+|---|---|---|---|
+| Week-4 rule baseline (hand-written impression, position, CTR logic) | 0.48 | n/a | n/a |
+| **Logistic Regression (final model)** | **0.66** | 0.573 | 0.484 |
+| Random Forest | 0.50 | 0.557 | 0.458 |
+| Histogram Gradient Boosting | 0.54 | 0.583 | 0.486 |
 
-## Who This Is For
+- Precision@50 rose from **0.48 to 0.66**, a **37.5% relative improvement** (about 24 vs. about 33 proxy-positive pages in the top 50).
+- Test set: 15,191 pages from 9 clients never seen in training. Base rate of the decline label is 0.412.
+- Logistic Regression is the final model because it gave the best Precision@50, the metric that matches real review capacity. Its simplicity also makes it easy to explain.
+- A random-row split gave Precision@50 of 0.72, but the client-grouped split gave 0.66. **0.66 is the number to trust**, because random splits leak client information.
 
-This project is relevant to:
+> **Note on reproducibility:** the notebook's audit cell recomputes every model metric and compares it to the reported table. Logistic Regression matches exactly. Random Forest and Gradient Boosting Precision@50 came out lower on recompute (0.50 and 0.54 vs. 0.58 and 0.56 originally reported), so the table above uses the recomputed values. The conclusion is unchanged: Logistic Regression is still the best at the top of the queue.
 
-- SEO teams
-- content strategists
-- digital marketing teams
-- search-intelligence analysts
-- data scientists working on content-performance monitoring
+## How it works (architecture)
 
-The system helps a reviewer answer:
-
-> Which pages should I investigate first?
-
-rather than:
-
-> Which pages should automatically be changed?
-
----
-
-## Data
-
-The project uses the pseudonymized FlyRank internship data warehouse.
-
-The main experiment uses:
-
-- **March 2026** as the feature window
-- **April 2026** as the future outcome window
-- one pseudonymized client-content page as the unit of analysis
-- approximately **100,893 modeling observations**
-
-The five main features are:
-
-- impressions
-- clicks
-- click-through rate (CTR)
-- average search position
-- sessions
-
-The prediction target represents future performance decline based on the following time period.
-
-No client names, domains, private URLs, search queries, or personally identifying information are published.
-
----
-
-## System Architecture
-
-```text
-FlyRank Internship Warehouse
-            |
-            v
-      DuckDB Aggregation
-            |
-      +-----+------+
-      |            |
-      v            v
-March Features   April Outcome
-      |            |
-      +-----+------+
-            |
-            v
-      Modeling Dataset
-            |
-            v
-   Client-Grouped Holdout
-            |
-     +------+------+ 
-     |             |
-     v             v
-Rule Baseline    ML Models
-                 |
-          +------+------+
-          |      |      |
-          v      v      v
-      Logistic   RF   Gradient
-      Regression      Boosting
-          |
-          v
-      Evaluation
-      Precision@50
-          |
-          v
-   Ranked Review Queue
-          |
-          v
- Reason Codes + Human Review
+```
+ FlyRank internship warehouse (Hugging Face, gated, pseudonymized)
+                  │  fact_content_daily_performance
+                  ▼
+        DuckDB reads parquet directly (hf://...)
+                  │
+     ┌────────────┴─────────────┐
+     ▼                          ▼
+ March 2026 features      April 2026 outcome
+ (impressions, clicks,    (April impressions)
+  CTR, avg position,             │
+  sessions)                      ▼
+     │              future_decline = 1 if April impressions
+     │              are at least 20% lower than March
+     ▼                          │
+     └────────────┬─────────────┘
+                  ▼
+   Client-grouped train/test split (GroupShuffleSplit)
+                  │
+      ┌───────────┼───────────────┐
+      ▼           ▼               ▼
+ Rule baseline  Logistic Reg.   Random Forest /
+ (Week 4)       (final)         Gradient Boosting
+      └───────────┼───────────────┘
+                  ▼
+     Precision@50 comparison on same held-out pages
+                  ▼
+   Ranked top-50 review queue + reason codes (CSV, charts)
 ```
 
----
-
-## Machine Learning Approach
-
-The main supervised model is **Logistic Regression**.
-
-I also compared it with:
-
-- Random Forest
-- Gradient Boosting
-- a transparent rule-based baseline
-
-Logistic Regression was selected as the final model because the operational goal is not simply maximizing general classification accuracy.
-
-The important question is:
-
-> Of the first 50 pages recommended for review, how many are genuinely relevant according to the future-decline target?
-
-For this reason, **Precision@50** is the primary evaluation metric.
-
-Logistic Regression also provides a relatively simple and interpretable modeling approach.
-
----
-
-## Validation Design
-
-A major design decision in this project was to avoid relying only on a random row split.
-
-Pages belonging to the same client may share similar patterns.
-
-If pages from the same client appear in both training and testing data, performance may look better than it would when the system encounters a completely new client.
-
-Therefore, the final evaluation uses a **client-grouped holdout**.
-
-The grouped split contained:
-
-- **34 training clients**
-- **9 test clients**
-- **0 client overlap**
-
-This means the model was evaluated on clients it had not seen during training.
-
-The workflow is also time-aware:
-
-```text
-March 2026 signals
-        |
-        v
-Model prediction
-        |
-        v
-April 2026 future outcome
-```
-
-This helps reduce future-information leakage.
-
----
-
-## Evaluation Results
-
-The final model comparison used the same operational metric:
-
-**Precision@50**
-
-| Method | Precision@50 |
-|---|---:|
-| Rule-Based Baseline | 0.48 |
-| Logistic Regression | **0.66** |
-| Random Forest | 0.58 |
-| Gradient Boosting | 0.56 |
-
-### Main Result
-
-The transparent rule-based baseline achieved:
-
-```text
-Precision@50 = 0.48
-```
-
-Logistic Regression achieved:
-
-```text
-Precision@50 = 0.66
-```
-
-This corresponds to a relative improvement of approximately:
-
-```text
-37.5%
-```
-
-In practical terms:
-
-```text
-Baseline:
-approximately 24 useful candidates
-among the first 50 recommendations.
-
-Logistic Regression:
-approximately 33 useful candidates
-among the first 50 recommendations.
-```
-
-The machine-learning ranking therefore improved the usefulness of the limited review queue in this experiment.
-
----
-
-## Random Split vs Client-Grouped Validation
-
-An earlier random-row evaluation produced:
-
-```text
-Precision@50 = 0.72
-```
-
-However, the more realistic client-grouped evaluation produced:
-
-```text
-Precision@50 = 0.66
-```
-
-I report **0.66 as the main result** because the client-grouped holdout is the more trustworthy test.
-
-It measures whether the model can generalize to clients that were completely absent from training.
-
-This difference also demonstrates why validation design matters in machine learning.
-
----
-
-## Example Workflow
-
-The complete workflow is:
-
-```text
-Historical search + engagement data
-              |
-              v
-        Feature creation
-              |
-              v
-     Future-decline target
-              |
-              v
-      Train ML models
-              |
-              v
-     Client-group validation
-              |
-              v
-       Model probability
-              |
-              v
-      Rank candidate pages
-              |
-              v
-        Reason codes
-              |
-              v
-        Human review
-```
-
----
-
-## Ranked Recommendations
-
-The final model converts prediction probabilities into a ranked review queue.
-
-An output can contain fields such as:
-
-```text
-rank
-content_hash_id
-model_score
-reason_code
-action
-```
-
-Example reason codes include:
-
-```text
-low_ctr_at_visible_position
-page_one_click_gap
-high_visibility_low_clicks
-```
-
-The purpose of these reason codes is to help a human reviewer understand why a page has been prioritized.
-
-The system recommends **review**, not automatic modification.
-
----
-
-## Setup
-
-### Option 1 — Google Colab
-
-The easiest way to reproduce the capstone is through Google Colab.
-
-Open:
-
-```text
-work/notebooks/capstone.ipynb
-```
-
-The repository contains a Colab link for this notebook.
-
-Access to the approved FlyRank internship warehouse is required.
-
-Add the Hugging Face access token to Google Colab Secrets using:
-
-```text
-HF_TOKEN
-```
-
-Then run:
-
-```text
-Runtime → Run all
-```
-
-The notebook installs the required libraries and runs the experiment.
-
----
-
-## Option 2 — Local Setup
-
-Clone the repository:
-
-```bash
-git clone https://github.com/msazunayed/flyrank-ml-internship.git
-```
-
-Enter the repository:
-
-```bash
-cd flyrank-ml-internship
-```
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-The starter/reference pipeline can be executed with:
-
-```bash
-python scripts/run_all.py
-```
-
-The final capstone analysis is located at:
-
-```text
-work/notebooks/capstone.ipynb
-```
-
----
-
-## Repository Structure
-
-```text
-flyrank-ml-internship/
-│
-├── README.md
-├── SETUP.md
-├── GUIDE.md
-├── DATA_USE.md
-├── requirements.txt
-│
-├── notebooks/
-│   └── introductory notebooks
-│
-├── scripts/
-│   └── reference ML pipeline
-│
-├── work/
-│   └── notebooks/
-│       ├── w01_research_question.ipynb
-│       ├── w02_ml_task_framing.ipynb
-│       ├── w03_data_contract.ipynb
-│       ├── w03_feature_leakage_check.ipynb
-│       ├── w04_signal_audit.ipynb
-│       ├── w04_baseline_score.ipynb
-│       ├── w05_model.ipynb
-│       ├── w06_validation_audit.ipynb
-│       ├── w07_action_playbook.ipynb
-│       └── capstone.ipynb
-│
-├── outputs/
-│
-└── docs/
-    └── plan-to-keep-building.md
-```
-
----
+### Data and label
+
+- **Table used:** `fact_content_daily_performance`, aggregated to one row per client-content page.
+- **Feature window:** March 2026. **Outcome window:** April 2026. The windows do not overlap.
+- **Filter:** pages need at least 100 Google Search Console impressions in March, so tiny pages don't dominate the percentage change.
+- **Final dataset:** 100,893 client-content observations.
+- **Features (5):** impressions, clicks, CTR, average search position, sessions.
+- **Label:** `future_decline = 1` when April impressions are at least 20% lower than March. This is an operational proxy, not a claim that the page is defective.
+
+### Leakage checks
+
+April impressions, the target, target-derived fields, FlyRank product outputs and scores, and identifiers are **not** used as predictors. Client names, domains, URLs, raw queries, and titles are excluded entirely.
+
+## Setup (reproduce from scratch)
+
+**Prerequisites:** Python 3.11, VS Code with the Jupyter extension, and a Hugging Face account with approved access to the gated dataset `FlyRank/internship-warehouse`.
+
+1. Clone the repo and enter it:
+   ```bash
+   git clone <YOUR_REPO_URL>
+   cd flyrank-ml-internship
+   ```
+2. Create and activate a virtual environment:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate        # Windows: .venv\Scripts\activate
+   ```
+3. Install the packages:
+   ```bash
+   pip install duckdb huggingface_hub scikit-learn pandas numpy matplotlib ipykernel
+   ```
+4. Log in to Hugging Face once so DuckDB can read the gated dataset:
+   ```bash
+   huggingface-cli login            # newer versions: hf auth login
+   ```
+   Alternatively, set the `HF_TOKEN` environment variable before starting VS Code.
+5. Open `work/notebooks/capstone.ipynb` in VS Code, click **Select Kernel**, and choose the `.venv` Python.
+6. Click **Run All**. Charts and tables are saved to `work/outputs/`.
+
+**Offline option:** set the environment variable `FLYRANK_DATA` to a local folder with the same layout as the warehouse. Never commit data files to the repo.
+
+## Usage and outputs
+
+Running the notebook top to bottom walks through nine sections: question, data, methodology, results, model comparison, limitations, ranked recommendations, and a demo outline. It writes these files to `work/outputs/`:
+
+| File | What it shows |
+|---|---|
+| `capstone_metrics.json` / `capstone_model_metrics.json` / `baseline_metrics.json` | Precision@50, ROC-AUC, average precision, relative improvement |
+| `model_vs_baseline_precision50.png` | Model vs. rule baseline chart |
+| `capstone_model_comparison.png` | Comparison of the three models |
+| `capstone_feature_coefficients.png` | Logistic Regression coefficients per feature |
+| `capstone_top20_scores.png` | Top-20 pages by model score |
+| `capstone_ranked_recommendations.csv` | The ranked review queue with `model_score` and `reason_code` per page |
+
+**Example reason codes** (interpretable context for reviewers): weak CTR at visible positions, high-visibility pages with relatively weak click capture, and pages where several model signals combine.
+
+## Guardrails
+
+- **Human in the loop.** The output is a ranked queue, never an automatic action. Content should not be auto-rewritten, merged, pruned, or deleted.
+- **Privacy.** Only public-safe, aggregated, pseudonymized measurements are used. No client names, URLs, or raw queries appear anywhere in the notebook or outputs.
+- **Careful claims.** Results are described as observed, measured, and directional, and are decision support only.
+- **Leakage prevention.** Client-grouped holdout with zero client overlap between train and test.
 
 ## Limitations
 
-This project has several important limitations.
+- **One time transition only.** The experiment covers March to April 2026, so stability across seasons and future periods is not established.
+- **Proxy label.** A 20% impression drop is not a measure of content quality or of whether a page needs a refresh.
+- **Unbalanced data.** Client histories and measurement availability differ across the warehouse.
+- **GA4 zero-fill.** Sessions are filled with zero where no value exists, which can mix real zero activity with missing analytics data. This should be fixed in a future iteration.
+- **Observational, not causal.** The results do not show that changing a recommended page will recover its search performance, and they do not reveal Google's ranking algorithm or prove any feature is a ranking factor.
+- **Modest signal.** ROC-AUC is about 0.57, so the model is useful for top-of-queue ranking but is not a strong general classifier.
+- **Not deployment-ready.** Forward-in-time validation across multiple feature and outcome windows is needed first.
+- **Before acting on a recommendation,** a reviewer should consider search intent, query mix, seasonality, SERP changes, related-page consolidation, measurement availability, and traffic volume.
 
-### 1. Limited Time Window
+## Repository layout
 
-The main experiment evaluates one March-to-April 2026 transition.
-
-Performance cannot automatically be assumed to remain identical across different seasons or future periods.
-
-### 2. Target Is a Proxy
-
-The future-decline target is a measurable proxy for performance decline.
-
-It is not a definitive measure of overall content quality.
-
-### 3. Prediction Is Not Causation
-
-A page receiving a high decline-risk score does **not** prove that editing or refreshing that page will improve its performance.
-
-Demonstrating that a particular intervention caused recovery would require an experiment or another valid causal design.
-
-### 4. Analytics Availability
-
-Engagement measurements may not be equally available across all clients.
-
-Missing session information can sometimes be difficult to distinguish from genuine zero activity.
-
-### 5. Generalization
-
-Additional forward-in-time validation across multiple periods would be required before considering operational deployment.
-
----
-
-## Important Interpretation
-
-This project should be interpreted as:
-
-```text
-decision support
+```
+flyrank-ml-internship/
+├── work/
+│   ├── notebooks/
+│   │   ├── capstone.ipynb                  # final end-to-end notebook
+│   │   ├── w01_research_question.ipynb
+│   │   ├── w02_ml_task_framing.ipynb
+│   │   ├── w03_data_contract.ipynb
+│   │   ├── w03_feature_leakage_check.ipynb
+│   │   ├── w04_baseline_score.ipynb
+│   │   ├── w05_model.ipynb
+│   │   ├── w06_validation_audit.ipynb
+│   │   └── w07_action_playbook.ipynb
+│   └── outputs/                            # generated charts, metrics, ranked CSV
+├── DATA_USE.md
+├── LICENSE
+└── README.md
 ```
 
-and not as:
+## Acknowledgments and data credit
 
-```text
-a prediction of Google's ranking algorithm
-```
-
-The model identifies pages that may deserve human investigation first.
-
-It does not claim to know Google's ranking rules and does not guarantee that changing a recommended page will improve traffic.
-
----
-
-## Case Studies
-
-Additional case studies extending this work are tracked here as they're added.
-
-- [The Plan to Keep Building](docs/plan-to-keep-building.md) — next case study: a computer vision project (image classification + pose estimation) for a pseudonymized client.
-
-To add a new case study, see the steps in `docs/plan-to-keep-building.md`.
-
----
-
-## AI Transparency
-
-AI tools, including ChatGPT and Claude, were used as development assistants during this project.
-
-AI assistance was used for:
-
-- interpreting assignment requirements
-- discussing modeling approaches
-- helping draft and refine code
-- debugging implementation problems
-- reviewing methodology
-- improving explanations
-- improving documentation
-- trimming the demo video and drafting supporting planning documents (e.g. `docs/plan-to-keep-building.md`)
-
-I personally ran the notebooks, inspected the outputs, checked the validation design, reviewed the generated code, made the final modeling decisions, and verified the results reported in this repository.
-
-AI was used as a **development and reasoning assistant**, not as a substitute for testing and verification.
-
----
-
-## Data Safety
-
-All public results use pseudonymized or aggregated information.
-
-This repository does not intentionally publish:
-
-- client names
-- private domains
-- private client URLs
-- raw private search queries
-- credentials
-- identifying client information
-
-Results are described using careful terms such as:
-
-- observed
-- measured
-- directional
-- decision-support
-
-rather than claiming that the analysis proves how Google's ranking algorithm works.
-
----
-
-## Future Improvements
-
-A future version of the project could:
-
-- evaluate several additional future time windows
-- test stability across different periods
-- improve handling of unavailable analytics measurements
-- evaluate probability calibration
-- test alternative review-capacity thresholds
-- monitor model performance over time
-- improve model explanation methods
-- evaluate the usefulness of recommendations after human review
-
-The long-term goal is a reliable **human-in-the-loop content review prioritization system**, rather than an automatic content-editing system.
-
----
-
-## Final Takeaway
-
-The main result of this capstone is:
-
-```text
-Rule Baseline Precision@50:       0.48
-Logistic Regression Precision@50: 0.66
-Relative Improvement:             37.5%
-```
-
-The project demonstrates how a transparent machine-learning workflow can improve the prioritization of pages for human review while maintaining careful validation, data safety, interpretability, and honest limitations.
-
----
-
-## Author
-
-**Shakil Ahmed Zunayed**
-
-FlyRank AI Internship  
-Machine Learning Track  
-Applied Search Intelligence
+Data: pseudonymized FlyRank internship warehouse release. Thanks to [FlyRank](https://flyrank.ai) for the dataset and the internship program. Use of the data is subject to the terms in `DATA_USE.md`.
