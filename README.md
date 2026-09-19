@@ -1,116 +1,551 @@
-# FlyRank ML Internship — Starter Repo
+# Predicting Future Content Performance Decline for Search-Intelligence Review Prioritization
 
-**Applied Search Intelligence: Google Search Ranking & Discoverability**
+## FlyRank Machine Learning Internship Capstone
 
-This is the starting point for the FlyRank ML Internship. You **clone it into your own public
-repo** (one click — *Use this template*), build everything there, and submit that repo URL on
-each assignment in your portal — it's your workspace, your submission, and your portfolio all
-at once. The rhythm is simple: do the work, commit it, submit on the card. Done.
-
-Everything here runs on a small **anonymized** slice of real FlyRank search data. No credentials,
-no private client data, no setup headaches.
-
-> **New here?** Two reads: **[SETUP.md](SETUP.md)** (GitHub, Colab, and data access — ten
-> minutes, with every silent pitfall flagged), then **[GUIDE.md](GUIDE.md)** (every file
-> explained, what to edit vs. leave alone, and where your own work goes — five minutes).
+**Lane:** Refresh / Content Opportunity Scoring
+**Author:** Shakil Ahmed Zunayed
 
 ---
 
-## Quickstart — first win in 2 minutes
+## Overview
 
-The fastest path is Google Colab (one click, zero install). Open Notebook 1 and run all cells:
+This project builds a machine-learning decision-support system that helps content and SEO teams decide which pages should be reviewed first when review capacity is limited.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/flyrank-bih/flyrank-ml-internship-starter/blob/main/notebooks/01_first_look_and_discovery.ipynb)
- **Week 1 — Run it, then discover a real truth yourself**
+The system uses historical search and engagement signals to estimate the probability that a content page will experience future performance decline.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/flyrank-bih/flyrank-ml-internship-starter/blob/main/notebooks/02_your_first_readable_model.ipynb)
- **Week 2 — The model is just a rule you can read**
+The predicted probabilities are then used to create a ranked review queue for human decision-making.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/flyrank-bih/flyrank-ml-internship-starter/blob/main/notebooks/03_working_with_the_full_release.ipynb)
- **Weeks 3+ — The full release (~79M rows) via DuckDB, no download needed** — hosted at
- [`FlyRank/internship-warehouse`](https://huggingface.co/datasets/FlyRank/internship-warehouse) (gated: request access + accept the data-use terms, approval is instant)
+The system does **not** automatically edit, delete, merge, or refresh content.
 
-### Prefer local?
+---
+
+## Problem
+
+A content team may manage thousands of pages but only have enough time to manually review a small number of them.
+
+The main research question is:
+
+> Can observable search and engagement signals measured before a decision point help predict future content-performance decline and produce a more useful ranked review queue than a transparent hand-written rule?
+
+The goal is therefore **prioritization**, not automatic content modification.
+
+---
+
+## Who This Is For
+
+This project is relevant to:
+
+- SEO teams
+- content strategists
+- digital marketing teams
+- search-intelligence analysts
+- data scientists working on content-performance monitoring
+
+The system helps a reviewer answer:
+
+> Which pages should I investigate first?
+
+rather than:
+
+> Which pages should automatically be changed?
+
+---
+
+## Data
+
+The project uses the pseudonymized FlyRank internship data warehouse.
+
+The main experiment uses:
+
+- **March 2026** as the feature window
+- **April 2026** as the future outcome window
+- one pseudonymized client-content page as the unit of analysis
+- approximately **100,893 modeling observations**
+
+The five main features are:
+
+- impressions
+- clicks
+- click-through rate (CTR)
+- average search position
+- sessions
+
+The prediction target represents future performance decline based on the following time period.
+
+No client names, domains, private URLs, search queries, or personally identifying information are published.
+
+---
+
+## System Architecture
+
+```text
+FlyRank Internship Warehouse
+            |
+            v
+      DuckDB Aggregation
+            |
+      +-----+------+
+      |            |
+      v            v
+March Features   April Outcome
+      |            |
+      +-----+------+
+            |
+            v
+      Modeling Dataset
+            |
+            v
+   Client-Grouped Holdout
+            |
+     +------+------+ 
+     |             |
+     v             v
+Rule Baseline    ML Models
+                 |
+          +------+------+
+          |      |      |
+          v      v      v
+      Logistic   RF   Gradient
+      Regression      Boosting
+          |
+          v
+      Evaluation
+      Precision@50
+          |
+          v
+   Ranked Review Queue
+          |
+          v
+ Reason Codes + Human Review
+```
+
+---
+
+## Machine Learning Approach
+
+The main supervised model is **Logistic Regression**.
+
+I also compared it with:
+
+- Random Forest
+- Gradient Boosting
+- a transparent rule-based baseline
+
+Logistic Regression was selected as the final model because the operational goal is not simply maximizing general classification accuracy.
+
+The important question is:
+
+> Of the first 50 pages recommended for review, how many are genuinely relevant according to the future-decline target?
+
+For this reason, **Precision@50** is the primary evaluation metric.
+
+Logistic Regression also provides a relatively simple and interpretable modeling approach.
+
+---
+
+## Validation Design
+
+A major design decision in this project was to avoid relying only on a random row split.
+
+Pages belonging to the same client may share similar patterns.
+
+If pages from the same client appear in both training and testing data, performance may look better than it would when the system encounters a completely new client.
+
+Therefore, the final evaluation uses a **client-grouped holdout**.
+
+The grouped split contained:
+
+- **34 training clients**
+- **9 test clients**
+- **0 client overlap**
+
+This means the model was evaluated on clients it had not seen during training.
+
+The workflow is also time-aware:
+
+```text
+March 2026 signals
+        |
+        v
+Model prediction
+        |
+        v
+April 2026 future outcome
+```
+
+This helps reduce future-information leakage.
+
+---
+
+## Evaluation Results
+
+The final model comparison used the same operational metric:
+
+**Precision@50**
+
+| Method | Precision@50 |
+|---|---:|
+| Rule-Based Baseline | 0.48 |
+| Logistic Regression | **0.66** |
+| Random Forest | 0.58 |
+| Gradient Boosting | 0.56 |
+
+### Main Result
+
+The transparent rule-based baseline achieved:
+
+```text
+Precision@50 = 0.48
+```
+
+Logistic Regression achieved:
+
+```text
+Precision@50 = 0.66
+```
+
+This corresponds to a relative improvement of approximately:
+
+```text
+37.5%
+```
+
+In practical terms:
+
+```text
+Baseline:
+approximately 24 useful candidates
+among the first 50 recommendations.
+
+Logistic Regression:
+approximately 33 useful candidates
+among the first 50 recommendations.
+```
+
+The machine-learning ranking therefore improved the usefulness of the limited review queue in this experiment.
+
+---
+
+## Random Split vs Client-Grouped Validation
+
+An earlier random-row evaluation produced:
+
+```text
+Precision@50 = 0.72
+```
+
+However, the more realistic client-grouped evaluation produced:
+
+```text
+Precision@50 = 0.66
+```
+
+I report **0.66 as the main result** because the client-grouped holdout is the more trustworthy test.
+
+It measures whether the model can generalize to clients that were completely absent from training.
+
+This difference also demonstrates why validation design matters in machine learning.
+
+---
+
+## Example Workflow
+
+The complete workflow is:
+
+```text
+Historical search + engagement data
+              |
+              v
+        Feature creation
+              |
+              v
+     Future-decline target
+              |
+              v
+      Train ML models
+              |
+              v
+     Client-group validation
+              |
+              v
+       Model probability
+              |
+              v
+      Rank candidate pages
+              |
+              v
+        Reason codes
+              |
+              v
+        Human review
+```
+
+---
+
+## Ranked Recommendations
+
+The final model converts prediction probabilities into a ranked review queue.
+
+An output can contain fields such as:
+
+```text
+rank
+content_hash_id
+model_score
+reason_code
+action
+```
+
+Example reason codes include:
+
+```text
+low_ctr_at_visible_position
+page_one_click_gap
+high_visibility_low_clicks
+```
+
+The purpose of these reason codes is to help a human reviewer understand why a page has been prioritized.
+
+The system recommends **review**, not automatic modification.
+
+---
+
+## Setup
+
+### Option 1 — Google Colab
+
+The easiest way to reproduce the capstone is through Google Colab.
+
+Open:
+
+```text
+work/notebooks/capstone.ipynb
+```
+
+The repository contains a Colab link for this notebook.
+
+Access to the approved FlyRank internship warehouse is required.
+
+Add the Hugging Face access token to Google Colab Secrets using:
+
+```text
+HF_TOKEN
+```
+
+Then run:
+
+```text
+Runtime → Run all
+```
+
+The notebook installs the required libraries and runs the experiment.
+
+---
+
+## Option 2 — Local Setup
+
+Clone the repository:
 
 ```bash
-git clone <this-repo-url>
-cd flyrank-ml-internship-starter
-pip install -r requirements.txt          # or: uv pip install -r requirements.txt
+git clone https://github.com/Malang43/flyrank-ml-internship-Malang43.git
+```
+
+Enter the repository:
+
+```bash
+cd flyrank-ml-internship-Malang43
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+The starter/reference pipeline can be executed with:
+
+```bash
 python scripts/run_all.py
 ```
 
-That runs the whole pipeline on the bundled sample and writes results to `outputs/`.
-
----
-
-## What you get
-
-| Path | What it is |
-|---|---|
-| `notebooks/` | Week 1–2 **first-win notebooks** (Colab-ready). Start here. |
-| `scripts/01–05` + `run_all.py` | The runnable reference pipeline: prepare → baseline → train → evaluate → PDF. |
-| `data/raw/content_refresh_anonymized.csv` | The anonymized starter dataset (~30k pages). |
-| `outputs/` | Example outputs so you can see the **target shape** (`model_report.md`, `refresh_queue_sample.csv`, `charts/`). |
-| `work/` | **Your space.** Lane experiments and your capstone live here — see `work/README.md`. |
-| `docs/` | The core docs + the data dictionary (see below). |
-
-### Read these (in `docs/`)
-
-1. **`ml-core-foundation-framework.md`** — the first-principles map of ML as a whole system. The backbone of the live sessions.
-2. **`ml-intern-dataset-and-lane-guide.md`** — how to use the data safely, the capstone workflow, and the analysis "lanes" you can pick from.
-3. **`intern-free-tooling-guide.md`** — the zero-budget tool stack (Python, Colab, free AI assistants). You never need to pay for anything.
-4. **`data-dictionary.md`** — all 44 columns: meaning, scale, and gotchas. Keep it open while you work.
-
----
-
-## The pipeline (what `run_all.py` does)
+The final capstone analysis is located at:
 
 ```text
-01_prepare_features.py   clean + build the feature vector, define the label
-02_baseline_score.py     a transparent hand-rule "fix this first" score
-03_train_model.py        logistic regression, decision tree, random forest (client-holdout split)
-04_evaluate_and_export.py  ranked queue + charts + Markdown report
-05_build_pdf_report.py   a shareable PDF summary
+work/notebooks/capstone.ipynb
 ```
 
-On the bundled sample, the learned model clearly beats the hand-written rule at picking the right
-pages to review first (**Precision@50 ≈ 0.24 → 0.74**; the model number can land 0.68–0.74
-depending on library versions — the ~3x lift is the point). The notebooks compute these numbers
-live, so they always reflect the current data and environment.
+---
 
-**Teaching point:** the model is the capstone, but the *workflow* is the lesson —
-`problem framing → data cleaning → baseline → first model → evaluation → explainable recommendation`.
+## Repository Structure
+
+```text
+flyrank-ml-internship-Malang43/
+│
+├── README.md
+├── SETUP.md
+├── GUIDE.md
+├── DATA_USE.md
+├── requirements.txt
+│
+├── notebooks/
+│   └── introductory notebooks
+│
+├── scripts/
+│   └── reference ML pipeline
+│
+├── work/
+│   └── notebooks/
+│       ├── w01_research_question.ipynb
+│       ├── w02_ml_task_framing.ipynb
+│       ├── w03_data_contract.ipynb
+│       ├── w03_feature_leakage_check.ipynb
+│       ├── w04_signal_audit.ipynb
+│       ├── w04_baseline_score.ipynb
+│       ├── w05_model.ipynb
+│       ├── w06_validation_audit.ipynb
+│       ├── w07_action_playbook.ipynb
+│       └── capstone.ipynb
+│
+├── outputs/
+│
+└── docs/
+```
 
 ---
 
-## Data safety (read `DATA_USE.md`)
+## Limitations
 
-- Only the small **anonymized** CSV ships here — no client names, domains, URLs, titles, or keywords.
-- **Never** add raw private client data to this repo or your fork. Need more data? Request an approved
-  release from your mentor — never export it yourself.
-- Don't paste client data into third-party AI tools.
-- Frame every result as **observed / measured / directional / decision-support** — never
-  "I predicted Google's algorithm."
+This project has several important limitations.
 
-The `.gitignore` blocks datasets by default, and CI fails any commit that includes a dataset.
+### 1. Limited Time Window
+
+The main experiment evaluates one March-to-April 2026 transition.
+
+Performance cannot automatically be assumed to remain identical across different seasons or future periods.
+
+### 2. Target Is a Proxy
+
+The future-decline target is a measurable proxy for performance decline.
+
+It is not a definitive measure of overall content quality.
+
+### 3. Prediction Is Not Causation
+
+A page receiving a high decline-risk score does **not** prove that editing or refreshing that page will improve its performance.
+
+Demonstrating that a particular intervention caused recovery would require an experiment or another valid causal design.
+
+### 4. Analytics Availability
+
+Engagement measurements may not be equally available across all clients.
+
+Missing session information can sometimes be difficult to distinguish from genuine zero activity.
+
+### 5. Generalization
+
+Additional forward-in-time validation across multiple periods would be required before considering operational deployment.
 
 ---
 
-## Assignments & schedule
+## Important Interpretation
 
-Weekly assignments, live events, and the capstone live on **your portal board** (your
-enrollment email has your access link). This repo is the shared technical foundation they all
-build on — and the `skills/` folder here is the instruction library for your AI assistant
-(start at [skills/README.md](skills/README.md)).
+This project should be interpreted as:
 
-**First time with GitHub?** You need exactly four things (full walkthrough: [SETUP.md](SETUP.md)):
-1. A free account at github.com.
-2. Your own copy of this repo: **Use this template → Create a new repository** → public.
-   (One click — brings the notebooks, `work/`, and the CI leak-guard with it.)
-3. In Colab: *File → Save a copy in GitHub* → pick your copy, branch `main` (Colab handles auth).
-4. That's your submission repo — share its **github.com/you/your-repo** URL with Assignment 1
-   (never a colab.research.google.com or drive.google.com link).
+```text
+decision support
+```
+
+and not as:
+
+```text
+a prediction of Google's ranking algorithm
+```
+
+The model identifies pages that may deserve human investigation first.
+
+It does not claim to know Google's ranking rules and does not guarantee that changing a recommended page will improve traffic.
 
 ---
 
-*Track leads: Mirza Ašćerić (ML) · Hole (data engineering). Code under MIT (see `LICENSE`); data under `DATA_USE.md`.*
+## AI Transparency
+
+AI tools, including ChatGPT, were used as development assistants during this project.
+
+AI assistance was used for:
+
+- interpreting assignment requirements
+- discussing modeling approaches
+- helping draft and refine code
+- debugging implementation problems
+- reviewing methodology
+- improving explanations
+- improving documentation
+
+I personally ran the notebooks, inspected the outputs, checked the validation design, reviewed the generated code, made the final modeling decisions, and verified the results reported in this repository.
+
+AI was used as a **development and reasoning assistant**, not as a substitute for testing and verification.
+
+---
+
+## Data Safety
+
+All public results use pseudonymized or aggregated information.
+
+This repository does not intentionally publish:
+
+- client names
+- private domains
+- private client URLs
+- raw private search queries
+- credentials
+- identifying client information
+
+Results are described using careful terms such as:
+
+- observed
+- measured
+- directional
+- decision-support
+
+rather than claiming that the analysis proves how Google's ranking algorithm works.
+
+---
+
+## Future Improvements
+
+A future version of the project could:
+
+- evaluate several additional future time windows
+- test stability across different periods
+- improve handling of unavailable analytics measurements
+- evaluate probability calibration
+- test alternative review-capacity thresholds
+- monitor model performance over time
+- improve model explanation methods
+- evaluate the usefulness of recommendations after human review
+
+The long-term goal is a reliable **human-in-the-loop content review prioritization system**, rather than an automatic content-editing system.
+
+---
+
+## Final Takeaway
+
+The main result of this capstone is:
+
+```text
+Rule Baseline Precision@50:       0.48
+Logistic Regression Precision@50: 0.66
+Relative Improvement:             37.5%
+```
+
+The project demonstrates how a transparent machine-learning workflow can improve the prioritization of pages for human review while maintaining careful validation, data safety, interpretability, and honest limitations.
+
+---
+
+## Author
+
+**Shakil Ahmed Zunayed**
+
+FlyRank AI Internship  
+Machine Learning Track  
+Applied Search Intelligence
