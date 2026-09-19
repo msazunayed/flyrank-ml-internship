@@ -409,6 +409,7 @@ flyrank-ml-internship-Malang43/
 ├── outputs/
 │
 └── docs/
+    └── plan-to-keep-building.md
 ```
 
 ---
@@ -467,9 +468,19 @@ It does not claim to know Google's ranking rules and does not guarantee that cha
 
 ---
 
+## Case Studies
+
+Additional case studies extending this work are tracked here as they're added.
+
+- [The Plan to Keep Building](docs/plan-to-keep-building.md) — next case study: a computer vision project (image classification + pose estimation) for a pseudonymized client.
+
+To add a new case study, see the steps in `docs/plan-to-keep-building.md`.
+
+---
+
 ## AI Transparency
 
-AI tools, including ChatGPT, were used as development assistants during this project.
+AI tools, including ChatGPT and Claude, were used as development assistants during this project.
 
 AI assistance was used for:
 
@@ -480,6 +491,7 @@ AI assistance was used for:
 - reviewing methodology
 - improving explanations
 - improving documentation
+- trimming the demo video and drafting supporting planning documents (e.g. `docs/plan-to-keep-building.md`)
 
 I personally ran the notebooks, inspected the outputs, checked the validation design, reviewed the generated code, made the final modeling decisions, and verified the results reported in this repository.
 
