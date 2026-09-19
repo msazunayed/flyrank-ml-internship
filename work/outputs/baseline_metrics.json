@@ -1,0 +1,22 @@
+{
+  "rows": 30000,
+  "flagged": 8953,
+  "base_rate_all": 0.5421,
+  "base_rate_eligible": 0.5985,
+  "precision_at_k": {
+    "10": 0.5,
+    "20": 0.4,
+    "50": 0.54,
+    "100": 0.45,
+    "500": 0.474
+  },
+  "signal_verdicts": {
+    "low_ctr_for_position": "CONFIRMED",
+    "staleness": "MIXED"
+  },
+  "rule_inputs": [
+    "impressions_90d",
+    "avg_position",
+    "ctr"
+  ]
+}
