@@ -347,13 +347,13 @@ The notebook installs the required libraries and runs the experiment.
 Clone the repository:
 
 ```bash
-git clone https://github.com/Malang43/flyrank-ml-internship-Malang43.git
+git clone https://github.com/msazunayed/flyrank-ml-internship.git
 ```
 
 Enter the repository:
 
 ```bash
-cd flyrank-ml-internship-Malang43
+cd flyrank-ml-internship
 ```
 
 Install dependencies:
@@ -379,7 +379,7 @@ work/notebooks/capstone.ipynb
 ## Repository Structure
 
 ```text
-flyrank-ml-internship-Malang43/
+flyrank-ml-internship/
 │
 ├── README.md
 ├── SETUP.md
