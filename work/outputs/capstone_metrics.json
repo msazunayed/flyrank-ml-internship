@@ -1,0 +1,23 @@
+{
+  "title": "Predicting Future Content Performance Decline for Search-Intelligence Review Prioritization",
+  "lane": "Refresh / Content Opportunity Scoring",
+  "model": "Logistic Regression",
+  "feature_window": "March 2026",
+  "outcome_window": "April 2026",
+  "modeling_rows": 100893,
+  "validation_design": "client-grouped holdout",
+  "test_clients": 9,
+  "client_overlap": 0,
+  "baseline_precision_at_50": 0.48,
+  "logistic_precision_at_50": 0.66,
+  "random_forest_precision_at_50": 0.58,
+  "gradient_boosting_precision_at_50": 0.56,
+  "relative_improvement_pct": 37.5,
+  "features": [
+    "impressions_31d",
+    "clicks_31d",
+    "ctr_31d",
+    "avg_position_31d",
+    "sessions_31d"
+  ]
+}
