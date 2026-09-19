@@ -5,7 +5,7 @@
 
 > A decision-support model that ranks web pages by their risk of losing search impressions next month, so a content/SEO reviewer knows which 50 pages to look at first.
 
-**Demo video (unlisted, ~5 min):** `https://youtu.be/wDECsVVbFCo`
+**Demo video (unlisted, ~5 min):** [https://youtu.be/wDECsVVbFCo](https://youtu.be/wDECsVVbFCo)
 **Notebook:** [`work/notebooks/capstone.ipynb`](work/notebooks/capstone.ipynb)
 
 ---
@@ -88,7 +88,7 @@ April impressions, the target, target-derived fields, FlyRank product outputs an
 
 1. Clone the repo and enter it:
    ```bash
-   git clone <YOUR_REPO_URL>
+   git clone https://github.com/msazunayed/flyrank-ml-internship.git
    cd flyrank-ml-internship
    ```
 2. Create and activate a virtual environment:
